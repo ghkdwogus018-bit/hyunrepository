@@ -60,6 +60,9 @@ const MIN_DAILY = "영어 단어 + 국어 1일 1독 + 인강 1강 복습";
 export default function StudyPlanner() {
   const [checked, setChecked] = useState({});
   const [moves, setMoves] = useState({});
+  const [edits, setEdits] = useState({});
+  const [editingId, setEditingId] = useState(null);
+  const [editVal, setEditVal] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState("time");
   const [selW, setSelW] = useState(1);
@@ -71,17 +74,28 @@ export default function StudyPlanner() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) { const v = JSON.parse(raw); setChecked(v.c || {}); setMoves(v.m || {}); }
+      if (raw) { const v = JSON.parse(raw); setChecked(v.c || {}); setMoves(v.m || {}); setEdits(v.e || {}); }
     } catch (e) {}
     setLoaded(true);
   }, []);
 
-  const save = (c, m) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ c, m })); } catch (e) {}
+  const save = (c, m, e) => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ c, m, e })); } catch (e2) {}
   };
-  const toggle = (id) => setChecked((p) => { const n = { ...p }; if (n[id]) delete n[id]; else n[id] = true; save(n, moves); return n; });
-  const moveTo = (id, d) => setMoves((p) => { const n = { ...p, [id]: d }; save(checked, n); return n; });
-  const resetAll = () => { setChecked({}); setMoves({}); save({}, {}); };
+  const toggle = (id) => setChecked((p) => { const n = { ...p }; if (n[id]) delete n[id]; else n[id] = true; save(n, moves, edits); return n; });
+  const moveTo = (id, d) => setMoves((p) => { const n = { ...p, [id]: d }; save(checked, n, edits); return n; });
+  const resetAll = () => { setChecked({}); setMoves({}); setEdits({}); save({}, {}, {}); };
+
+  const startEdit = (t) => { setEditingId(t.id); setEditVal(edits[t.id] ?? t.label); };
+  const commitEdit = (id) => {
+    const trimmed = editVal.trim();
+    setEdits((p) => {
+      const n = trimmed ? { ...p, [id]: trimmed } : (() => { const x = { ...p }; delete x[id]; return x; })();
+      save(checked, moves, n);
+      return n;
+    });
+    setEditingId(null);
+  };
 
   const stats = useMemo(() => {
     let done = 0; const bySub = {}, byCourse = {}, perWeek = {};
@@ -163,13 +177,28 @@ export default function StudyPlanner() {
                 {items.length === 0 && <div className="p-col-empty">여기로 옮겨도 돼요</div>}
                 {items.map((t) => {
                   const on = !!checked[t.id]; const sc = SUBJECTS[t.sub];
+                  const isEditing = editingId === t.id;
+                  const label = edits[t.id] ?? t.label;
                   return (
-                    <div key={t.id} className={`p-card${on ? " on" : ""}`} style={{ "--sc": sc }} draggable onDragStart={() => setDragId(t.id)} onDragEnd={() => { setDragId(null); setOverDay(null); }}>
+                    <div key={t.id} className={`p-card${on ? " on" : ""}${isEditing ? " editing" : ""}`} style={{ "--sc": sc }}
+                      draggable={!isEditing} onDragStart={() => !isEditing && setDragId(t.id)} onDragEnd={() => { setDragId(null); setOverDay(null); }}>
                       <div className="p-card-top">
                         <button className="p-card-ck" onClick={() => toggle(t.id)} aria-pressed={on} aria-label="완료"><span className="p-box">{on && <svg viewBox="0 0 16 16" width="10" height="10"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</span></button>
                         {subTag(t.sub)}
+                        {edits[t.id] && !isEditing && <span className="p-edited-dot" title="수정됨" />}
                       </div>
-                      <span className="p-card-text">{t.label}</span>
+                      {isEditing ? (
+                        <input
+                          className="p-card-input"
+                          value={editVal}
+                          autoFocus
+                          onChange={(e) => setEditVal(e.target.value)}
+                          onBlur={() => commitEdit(t.id)}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitEdit(t.id); if (e.key === "Escape") setEditingId(null); }}
+                        />
+                      ) : (
+                        <span className="p-card-text" onDoubleClick={() => startEdit(t)} title="더블클릭으로 수정">{label}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -294,9 +323,12 @@ const CSS = `
 .p-box{width:18px;height:18px;border-radius:6px;border:1.6px solid #CFD0D8;background:var(--surface);display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;}
 .p-card.on .p-box{background:var(--sc);border-color:var(--sc);}
 .p-subj{text-align:center;padding:1.5px 7px;border-radius:6px;font-size:10.5px;font-weight:800;line-height:1.5;}
-.p-card-text{font-size:12.5px;line-height:1.45;}
+.p-card-text{font-size:12.5px;line-height:1.45;cursor:text;}
 .p-card.on .p-card-text{color:var(--muted);text-decoration:line-through;text-decoration-color:#CFD0D8;}
 .p-card.on .p-subj{opacity:.5;}
+.p-card.editing{border-color:#3B79BD;box-shadow:0 0 0 2px #3B79BD33;}
+.p-card-input{font-family:inherit;font-size:12.5px;line-height:1.45;width:100%;border:0;outline:none;background:transparent;color:var(--ink);padding:0;resize:none;}
+.p-edited-dot{width:6px;height:6px;border-radius:99px;background:#3B79BD;margin-left:auto;flex-shrink:0;}
 .p-scrollhint{font-size:11.5px;color:var(--muted);font-weight:600;text-align:center;margin-top:10px;}
 
 .p-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px;}
