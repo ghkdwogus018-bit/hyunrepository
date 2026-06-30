@@ -12,10 +12,6 @@ try:
 except ImportError:
     krx_stock = None
 
-try:
-    import FinanceDataReader as fdr
-except ImportError:
-    fdr = None
 
 
 # ISA 계좌에서 주로 활용되는 국내 ETF 티커 목록
