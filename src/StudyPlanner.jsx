@@ -62,9 +62,10 @@ const EXAM = addDays(weekMonday(48), 5);
 
 const SUB_ORDER = ["영어", "국어", "행정법", "행정학"];
 
-// 오전 = 영어·국어(시험 1교시 과목) / 오후 = 행정법·행정학·공통
+// 오전 = 영어·국어(시험 1교시 과목) / 오후 = 행정법·행정학·공통 (드래그로 변경 가능)
 const AM_SUBS = new Set(["영어", "국어"]);
-const slotOf = (t) => (AM_SUBS.has(t.sub) ? "am" : "pm");
+const baseSlot = (t) => (AM_SUBS.has(t.sub) ? "am" : "pm");
+const SLOT_META = [["am", "☀️ 오전", "국어 · 영어"], ["pm", "🌙 오후", "행정법 · 행정학"]];
 
 function generateWeek(W) {
   const tasks = [];
@@ -113,6 +114,7 @@ const MIN_DAILY = "심슨 보카 + 중학 영단어 150개 + 국어 1일 1독 + 
 export default function StudyPlanner() {
   const [checked, setChecked] = useState({});
   const [moves, setMoves] = useState({});
+  const [slotMoves, setSlotMoves] = useState({});
   const [edits, setEdits] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
@@ -121,30 +123,30 @@ export default function StudyPlanner() {
   const [selW, setSelW] = useState(1);
   const [subj, setSubj] = useState("영어");
   const [dragId, setDragId] = useState(null);
-  const [overDay, setOverDay] = useState(null);
+  const [overCell, setOverCell] = useState(null);
   const didInit = useRef(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) { const v = JSON.parse(raw); setChecked(v.c || {}); setMoves(v.m || {}); setEdits(v.e || {}); }
+      if (raw) { const v = JSON.parse(raw); setChecked(v.c || {}); setMoves(v.m || {}); setSlotMoves(v.s || {}); setEdits(v.e || {}); }
     } catch (e) {}
     setLoaded(true);
   }, []);
 
-  const save = (c, m, e) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ c, m, e })); } catch (e2) {}
+  const save = (c, m, e, s) => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ c, m, e, s })); } catch (e2) {}
   };
-  const toggle = (id) => setChecked((p) => { const n = { ...p }; if (n[id]) delete n[id]; else n[id] = true; save(n, moves, edits); return n; });
-  const moveTo = (id, d) => setMoves((p) => { const n = { ...p, [id]: d }; save(checked, n, edits); return n; });
-  const resetAll = () => { setChecked({}); setMoves({}); setEdits({}); save({}, {}, {}); };
+  const toggle = (id) => setChecked((p) => { const n = { ...p }; if (n[id]) delete n[id]; else n[id] = true; save(n, moves, edits, slotMoves); return n; });
+  const moveCell = (id, d, slot) => { const nm = { ...moves, [id]: d }; const ns = { ...slotMoves, [id]: slot }; setMoves(nm); setSlotMoves(ns); save(checked, nm, edits, ns); };
+  const resetAll = () => { setChecked({}); setMoves({}); setSlotMoves({}); setEdits({}); save({}, {}, {}, {}); };
 
   const startEdit = (t) => { setEditingId(t.id); setEditVal(edits[t.id] ?? t.label); };
   const commitEdit = (id) => {
     const trimmed = editVal.trim();
     setEdits((p) => {
       const n = trimmed ? { ...p, [id]: trimmed } : (() => { const x = { ...p }; delete x[id]; return x; })();
-      save(checked, moves, n);
+      save(checked, moves, n, slotMoves);
       return n;
     });
     setEditingId(null);
@@ -174,6 +176,7 @@ export default function StudyPlanner() {
 
   const pct = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
   const dayOf = (t) => (moves[t.id] != null ? moves[t.id] : t.dDay);
+  const slotOf = (t) => (slotMoves[t.id] != null ? slotMoves[t.id] : baseSlot(t));
   const subTag = (s) => { const c = SUBJECTS[s]; return <span className="p-subj" style={{ background: `${c}1A`, color: c }}>{s}</span>; };
   const dday = Math.ceil((EXAM - TODAY) / 86400000);
   const todayW = planWeekOf(TODAY);
@@ -219,28 +222,29 @@ export default function StudyPlanner() {
           const date = addDays(board.monday, d); const isToday = sameDay(date, TODAY);
           const items = board.tasks.filter((t) => dayOf(t) === d);
           return (
-            <div key={d} className={`p-col${overDay === d ? " over" : ""}${isToday ? " today" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setOverDay(d); }} onDragLeave={() => setOverDay((o) => (o === d ? null : o))}
-              onDrop={() => { if (dragId != null) moveTo(dragId, d); setDragId(null); setOverDay(null); }}>
+            <div key={d} className={`p-col${isToday ? " today" : ""}`}>
               <div className="p-col-head">
                 <span className="p-col-date">{fmtMD(date)}({dow})</span>
                 {isToday && <span className="p-col-today">오늘</span>}
               </div>
               <div className="p-col-body">
-                {items.length === 0 && <div className="p-col-empty">여기로 옮겨도 돼요</div>}
-                {[["am", "☀️ 오전", "국어 · 영어"], ["pm", "🌙 오후", "행정법 · 행정학"]].map(([slot, slabel, shint]) => {
+                {SLOT_META.map(([slot, slabel, shint]) => {
                   const slotItems = items.filter((t) => slotOf(t) === slot);
-                  if (slotItems.length === 0) return null;
+                  const isOver = overCell && overCell.d === d && overCell.slot === slot;
                   return (
-                    <div key={slot} className={`p-slot ${slot}`}>
+                    <div key={slot} className={`p-slot ${slot}${isOver ? " over" : ""}`}
+                      onDragOver={(e) => { e.preventDefault(); setOverCell({ d, slot }); }}
+                      onDragLeave={() => setOverCell((o) => (o && o.d === d && o.slot === slot ? null : o))}
+                      onDrop={() => { if (dragId != null) moveCell(dragId, d, slot); setDragId(null); setOverCell(null); }}>
                       <div className="p-slot-head"><span className="p-slot-label">{slabel}</span><span className="p-slot-hint">{shint}</span></div>
+                      {slotItems.length === 0 && <div className="p-slot-empty">여기로 옮겨도 돼요</div>}
                       {slotItems.map((t) => {
                         const on = !!checked[t.id]; const sc = SUBJECTS[t.sub];
                         const isEditing = editingId === t.id;
                         const label = edits[t.id] ?? t.label;
                         return (
                           <div key={t.id} className={`p-card${on ? " on" : ""}${isEditing ? " editing" : ""}${t.isReview ? " review" : ""}`} style={{ "--sc": sc }}
-                            draggable={!isEditing} onDragStart={() => !isEditing && setDragId(t.id)} onDragEnd={() => { setDragId(null); setOverDay(null); }}>
+                            draggable={!isEditing} onDragStart={() => !isEditing && setDragId(t.id)} onDragEnd={() => { setDragId(null); setOverCell(null); }}>
                             <div className="p-card-top">
                               <button className="p-card-ck" onClick={() => toggle(t.id)} aria-pressed={on} aria-label="완료"><span className="p-box">{on && <svg viewBox="0 0 16 16" width="10" height="10"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</span></button>
                               {subTag(t.sub)}
@@ -378,11 +382,13 @@ const CSS = `
 .p-col-today{margin-left:auto;font-size:9px;font-weight:800;color:#fff;background:#3B79BD;padding:2px 7px;border-radius:99px;}
 .p-col-body{display:flex;flex-direction:column;gap:10px;min-height:60px;flex:1;}
 .p-col-empty{font-size:11px;color:#C2C4CC;font-weight:600;padding:6px 2px;text-align:center;}
-.p-slot{display:flex;flex-direction:column;gap:6px;}
-.p-slot.pm{padding-top:8px;border-top:1px dashed var(--line2);}
+.p-slot{display:flex;flex-direction:column;gap:6px;border-radius:8px;padding:4px;margin:0 -2px;transition:background .12s,box-shadow .12s;}
+.p-slot.pm{margin-top:4px;padding-top:8px;border-top:1px dashed var(--line2);}
+.p-slot.over{background:#3B79BD14;box-shadow:inset 0 0 0 1.5px #3B79BD66;}
 .p-slot-head{display:flex;align-items:baseline;gap:6px;padding:0 1px;}
 .p-slot-label{font-size:11.5px;font-weight:800;color:var(--ink2);letter-spacing:-.01em;}
 .p-slot-hint{font-size:9.5px;font-weight:700;color:#B6B8C2;}
+.p-slot-empty{font-size:10.5px;color:#C8CAD2;font-weight:600;padding:4px 2px;text-align:center;}
 .p-card{display:flex;flex-direction:column;gap:5px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;box-shadow:var(--shadow);cursor:grab;}
 .p-card:active{cursor:grabbing;}
 .p-card-top{display:flex;align-items:center;gap:6px;}
