@@ -1,10 +1,8 @@
 name: ISA ETF 일일 알림 (매일 오전 8시 KST)
 
 on:
-  # KST 08:00 = UTC 23:00 (전날)
   schedule:
     - cron: "0 23 * * *"
-  # 수동 실행 버튼
   workflow_dispatch:
 
 jobs:
@@ -24,9 +22,9 @@ jobs:
       - name: 의존성 설치
         run: pip install -r requirements.txt
 
-      - name: ISA ETF 분석 및 카카오톡 전송
+      - name: ISA ETF 분석 및 텔레그램 전송
         env:
-          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
-          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TOP_N_ETF: "10"
         run: python main.py

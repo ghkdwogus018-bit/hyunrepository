@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from etf_analyzer import analyze_etfs, format_message
-from kakao_sender import send_message
+from telegram_sender import send_message
 
 
 def run():
