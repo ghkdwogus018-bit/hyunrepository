@@ -48,7 +48,7 @@ const COURSES = [
   return { sub, name, total, ws, we, ci, alloc };
 });
 
-const MILESTONES = { 16: "전 과목 1회독 완료", 28: "기출 1회독 완료", 37: "동형 모의고사 시작", 48: "시험" };
+const MILESTONES = { 16: "전 과목 1회독 완료", 20: "국어 올인원 강의 완강(단권화 1회독)", 28: "기출 1회독 완료", 37: "동형 모의고사 시작", 47: "국어 단권화 7회독 완료 🎯", 48: "시험" };
 const DOW = ["월", "화", "수", "목", "금", "토"];
 const START = new Date(2026, 6, 6);
 const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
@@ -66,6 +66,12 @@ const SUB_ORDER = ["영어", "국어", "행정법", "행정학"];
 const AM_SUBS = new Set(["영어", "국어"]);
 const baseSlot = (t) => (AM_SUBS.has(t.sub) ? "am" : "pm");
 const SLOT_META = [["am", "☀️ 오전", "국어 · 영어"], ["pm", "🌙 오후", "행정법 · 행정학"]];
+
+// 국어 올인원 단권화 7회독 일정 (1회독=강의 완강 9~20주, 이후 2~7회독 분배)
+const DANGWON_ROUNDS = [
+  [1, 9, 20], [2, 21, 27], [3, 28, 33], [4, 34, 38], [5, 39, 42], [6, 43, 45], [7, 46, 48],
+];
+const dangwonRound = (W) => { const r = DANGWON_ROUNDS.find(([, s, e]) => W >= s && W <= e); return r ? r[0] : null; };
 
 function generateWeek(W) {
   const tasks = [];
@@ -88,10 +94,13 @@ function generateWeek(W) {
   });
 
   // 매일 고정 카드
+  const dr = dangwonRound(W);
   for (let d = 0; d < 6; d++) {
     if (W <= 46) tasks.push({ id: `w${W}v${d}`, sub: "영어", label: "심슨 보카 (어휘 누적 암기)", dDay: d, fixed: true });
     tasks.push({ id: `w${W}vk${d}`, sub: "영어", label: "중학 영단어 150개", dDay: d, fixed: true });
     tasks.push({ id: `w${W}i${d}`, sub: "국어", label: "독해야 산다 1일 1독", dDay: d, fixed: true });
+    // 올인원 단권화 회독 (강의 완강 후 2회독부터 매일 회독 카드)
+    if (dr && dr >= 2) tasks.push({ id: `w${W}dk${d}`, sub: "국어", label: `올인원 단권화 ${dr}회독`, dDay: d, fixed: true });
   }
 
   // 당일 복습 카드 (강의 있는 날만, 과목별)
