@@ -167,7 +167,7 @@ export default function StudyPlanner() {
     COURSES.forEach((c) => (byCourse[c.ci] = { d: 0, t: 0 }));
     for (let W = 1; W <= 48; W++) perWeek[W] = { d: 0, t: 0 };
     ALL_TASKS.forEach((t) => {
-      const W = +t.id.slice(1).split(/[civr]/)[0];
+      const W = +t.id.slice(1).match(/^\d+/)[0];
       perWeek[W].t++; bySub[t.sub].t++; if (t.ci != null) byCourse[t.ci].t++;
       if (checked[t.id]) { done++; perWeek[W].d++; bySub[t.sub].d++; if (t.ci != null) byCourse[t.ci].d++; }
     });
